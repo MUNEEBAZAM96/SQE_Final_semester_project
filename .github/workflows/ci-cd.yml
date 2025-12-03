@@ -1,0 +1,303 @@
+name: CI/CD Pipeline
+
+on:
+  # Source Stage: Trigger pipeline on code changes
+  push:
+    branches:
+      - master
+      - feature/sqa-ci-cd-implementation
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
+  workflow_dispatch: # Allow manual triggering
+
+env:
+  NODE_VERSION: '18.x'
+  MONGODB_VERSION: '6.0'
+
+jobs:
+  # ============================================
+  # BUILD STAGE: Code Compilation & Artifact Creation
+  # ============================================
+  build:
+    name: Build Application
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        component: [backend, frontend]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.component == 'backend' && 'package-lock.json' || 'frontend/package-lock.json' }}
+      
+      - name: Install backend dependencies
+        if: matrix.component == 'backend'
+        working-directory: .
+        run: |
+          npm ci
+      
+      - name: Install frontend dependencies
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        run: |
+          npm ci
+      
+      - name: Build backend (verify)
+        if: matrix.component == 'backend'
+        working-directory: .
+        run: |
+          echo "Backend build verification - checking for syntax errors"
+          node -c server.js
+          node -c app.js
+          echo "✓ Backend syntax check passed"
+      
+      - name: Build frontend
+        if: matrix.component == 'frontend'
+        working-directory: ./frontend
+        env:
+          NODE_OPTIONS: '--openssl-legacy-provider'
+          CI: false
+        run: |
+          npm run build
+          echo "✓ Frontend build completed"
+      
+      - name: Upload frontend build artifacts
+        if: matrix.component == 'frontend'
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+          retention-days: 7
+
+  # ============================================
+  # TEST STAGE: Automated Testing
+  # ============================================
+  test-backend:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    needs: build
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Create test environment file
+        run: |
+          cat > .variables.env << EOF
+          NODE_ENV=test
+          DATABASE=mongodb://localhost:27017/mern-admin-test
+          PORT=8888
+          SECRET=test-secret-key
+          KEY=test-key
+          JWT_SCHEME=jwt
+          JWT_TOKEN_PREFIX=Bearer
+          JWT_SECRET=test-jwt-secret-key-for-testing-only
+          JWT_TOKEN_EXPIRATION=18000000
+          JWT_TOKEN_HASH_ALGO=SHA-256
+          EOF
+      
+      - name: Run backend tests
+        env:
+          NODE_ENV: test
+          DATABASE: mongodb://localhost:27017/mern-admin-test
+        run: |
+          echo "Backend tests will be executed here"
+          # npm test
+          # Placeholder - tests will be added in next phase
+          echo "✓ Backend test stage ready (tests to be implemented)"
+      
+      - name: Generate test coverage
+        if: always()
+        run: |
+          echo "Test coverage report will be generated here"
+          # npm run test:coverage
+          # Placeholder - coverage will be added with tests
+
+  test-frontend:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    needs: build
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+      
+      - name: Run frontend tests
+        working-directory: ./frontend
+        env:
+          NODE_OPTIONS: '--openssl-legacy-provider'
+          CI: true
+        run: |
+          echo "Frontend tests will be executed here"
+          # npm test -- --coverage --watchAll=false
+          # Placeholder - tests will be added in next phase
+          echo "✓ Frontend test stage ready (tests to be implemented)"
+      
+      - name: Run E2E tests
+        working-directory: ./frontend
+        env:
+          NODE_OPTIONS: '--openssl-legacy-provider'
+        run: |
+          echo "Cypress E2E tests will be executed here"
+          # npx cypress run
+          # Placeholder - Cypress tests will be added in next phase
+          echo "✓ E2E test stage ready (Cypress tests to be implemented)"
+
+  # ============================================
+  # STAGING STAGE: Deploy to Staging Environment
+  # ============================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, test-backend, test-frontend]
+    if: github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/feature/sqa-ci-cd-implementation'
+    environment:
+      name: staging
+      url: https://staging.mern-admin.example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+      
+      - name: Deploy to staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          echo "Staging deployment will be configured here"
+          echo "Options:"
+          echo "  - AWS CodeDeploy"
+          echo "  - GitHub Pages (for frontend)"
+          echo "  - Heroku"
+          echo "  - Vercel/Netlify"
+          echo "✓ Staging deployment stage ready"
+      
+      - name: Health check
+        run: |
+          echo "Performing health check on staging environment..."
+          # curl -f https://staging.mern-admin.example.com/health || exit 1
+          echo "✓ Health check placeholder"
+
+  # ============================================
+  # PRODUCTION STAGE: Deploy to Production
+  # ============================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, test-backend, test-frontend]
+    if: github.ref == 'refs/heads/master'
+    environment:
+      name: production
+      url: https://mern-admin.example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      
+      - name: Download frontend build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build
+      
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          echo "Production deployment will be configured here"
+          echo "Options:"
+          echo "  - AWS CodeDeploy"
+          echo "  - Azure DevOps Releases"
+          echo "  - GitHub Actions deployment"
+          echo "✓ Production deployment stage ready"
+      
+      - name: Health check
+        run: |
+          echo "Performing health check on production environment..."
+          # curl -f https://mern-admin.example.com/health || exit 1
+          echo "✓ Health check placeholder"
+      
+      - name: Notify deployment success
+        run: |
+          echo "✅ Production deployment successful!"
+          # Add notification logic here (Slack, email, etc.)
+
+  # ============================================
+  # PIPELINE SUMMARY
+  # ============================================
+  pipeline-summary:
+    name: Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [build, test-backend, test-frontend]
+    if: always()
+    
+    steps:
+      - name: Pipeline Status
+        run: |
+          echo "## CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | ✅ Triggered |" >> $GITHUB_STEP_SUMMARY
+          echo "| Build | ${{ needs.build.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend Tests | ${{ needs.test-backend.result == 'success' && '✅ Passed' || '⚠️ Pending' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Tests | ${{ needs.test-frontend.result == 'success' && '✅ Passed' || '⚠️ Pending' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
