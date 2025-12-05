@@ -160,10 +160,12 @@ exports.isValidToken = async (req, res, next) => {
       next();
     }
   } catch (err) {
-    res.status(500).json({
+    // Any JWT verification or token-related error should return 401 (unauthorized),
+    // not 500 (server error). This aligns with security best practices and test expectations.
+    return res.status(401).json({
       success: false,
       result: null,
-      message: err.message,
+      message: "Token verification failed, authorization denied.",
       jwtExpired: true,
     });
   }

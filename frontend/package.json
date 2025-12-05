@@ -24,7 +24,10 @@
     "dev:remote": "cross-env REACT_APP_DEV_REMOTE=remote NODE_OPTIONS=--openssl-legacy-provider npm start",
     "build": "cross-env NODE_OPTIONS=--openssl-legacy-provider craco build",
     "test": "cross-env NODE_OPTIONS=--openssl-legacy-provider craco test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "test:e2e": "cypress run"
   },
   "browserslist": {
     "production": [
@@ -44,6 +47,7 @@
     "craco-alias": "^3.0.1",
     "craco-less": "^1.17.1",
     "cross-env": "^7.0.3",
+    "cypress": "^15.7.1",
     "react-reconciler": "^0.26.2",
     "react-refresh": "^0.10.0"
   }
